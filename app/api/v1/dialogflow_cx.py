@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 import requests
 from pydantic import BaseModel, Field
+import logging
 
 router = APIRouter(tags=["dialogflow_cx"])
 
@@ -26,9 +27,32 @@ class DetectIntentRequest(BaseModel):
 @router.post("/detect-intent")
 async def detect_intent(body: DetectIntentRequest):
     # call the dialogflow cx api
-    response = requests.post(
-        f"{BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}/agents/{AGENT_ID}/sessions/{SESSION_ID}/detectIntent",
-        headers=HEADERS,
-        json={"queryInput": {"text": {"text": body.text, "languageCode": body.languageCode}}},
-    )
-    return response.json()
+    try:
+        response = requests.post(
+            f"{BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}/agents/{AGENT_ID}/sessions/{SESSION_ID}/detectIntent",
+            headers=HEADERS,
+            json={"queryInput": {"text": {"text": body.text, "languageCode": body.languageCode}}},
+        )
+        
+        # Check if the request was successful
+        response.raise_for_status()
+        
+        # Check if response has content
+        if not response.text.strip():
+            logging.error("Empty response from Dialogflow API")
+            raise HTTPException(status_code=500, detail="Empty response from Dialogflow API")
+        
+        # Try to parse JSON
+        try:
+            return response.json()
+        except requests.exceptions.JSONDecodeError as e:
+            logging.error(f"Failed to parse JSON response: {e}")
+            logging.error(f"Response content: {response.text}")
+            raise HTTPException(status_code=500, detail=f"Invalid JSON response from Dialogflow API: {response.text}")
+            
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Request failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Dialogflow API: {str(e)}")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
