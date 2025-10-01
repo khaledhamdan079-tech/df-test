@@ -2,21 +2,55 @@ from fastapi import APIRouter, Request, HTTPException
 import requests
 from pydantic import BaseModel, Field
 import logging
+import os
+import base64
+import tempfile
+from google.auth.transport.requests import Request as GoogleRequest
+from google.oauth2 import service_account
 
 router = APIRouter(tags=["dialogflow_cx"])
 
 
 BASE_URL = "https://dialogflow.googleapis.com/v3"
 
-API_KEY = '6b5f927cd73172b839941f53d4ffc34d9c3e6689'
 PROJECT_ID = "apt-aleph-471911-k3"
 LOCATION = "us-central1"
 AGENT_ID = "e4926e9e-ddd0-4f04-9ba9-a3e1afe8d88b"
 SESSION_ID = "default-session"
 
-HEADERS = {
-    "Content-Type": "application/json",
-}
+# Service account credentials - supports both file path and base64 encoded JSON
+SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+SERVICE_ACCOUNT_JSON_B64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_B64")
+SCOPES = ['https://www.googleapis.com/auth/cloud-platform']
+
+def get_access_token():
+    """Get OAuth2 access token using service account credentials"""
+    try:
+        if SERVICE_ACCOUNT_JSON_B64:
+            # For Railway deployment - decode base64 JSON
+            service_account_info = base64.b64decode(SERVICE_ACCOUNT_JSON_B64).decode('utf-8')
+            credentials = service_account.Credentials.from_service_account_info(
+                service_account_info, scopes=SCOPES
+            )
+        elif SERVICE_ACCOUNT_FILE:
+            # For local development - use file path
+            credentials = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE, scopes=SCOPES
+            )
+        else:
+            raise HTTPException(
+                status_code=500, 
+                detail="Neither GOOGLE_APPLICATION_CREDENTIALS nor GOOGLE_SERVICE_ACCOUNT_JSON_B64 environment variable is set"
+            )
+        
+        credentials.refresh(GoogleRequest())
+        return credentials.token
+    except Exception as e:
+        logging.error(f"Failed to get access token: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to authenticate with Google Cloud: {str(e)}"
+        )
 
 #let body has text and languageCode and make them required and let them show in the docs  and make them as required in the docs and swagger ui
 class DetectIntentRequest(BaseModel):
@@ -27,9 +61,17 @@ class DetectIntentRequest(BaseModel):
 async def detect_intent(body: DetectIntentRequest):
     # call the dialogflow cx api
     try:
+        # Get OAuth2 access token
+        access_token = get_access_token()
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}",
+        }
+        
         response = requests.post(
-            f"{BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}/agents/{AGENT_ID}/sessions/{SESSION_ID}:detectIntent?key={API_KEY}",
-            headers=HEADERS,
+            f"{BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}/agents/{AGENT_ID}/sessions/{SESSION_ID}:detectIntent",
+            headers=headers,
             json={"queryInput": {"text": {"text": body.text, "languageCode": body.languageCode}}},
         )
         
