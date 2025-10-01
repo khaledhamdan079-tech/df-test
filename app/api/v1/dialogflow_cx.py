@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 import logging
 import os
 import base64
+import json
 import tempfile
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import service_account
@@ -28,7 +29,8 @@ def get_access_token():
     try:
         if SERVICE_ACCOUNT_JSON_B64:
             # For Railway deployment - decode base64 JSON
-            service_account_info = base64.b64decode(SERVICE_ACCOUNT_JSON_B64).decode('utf-8')
+            service_account_json = base64.b64decode(SERVICE_ACCOUNT_JSON_B64).decode('utf-8')
+            service_account_info = json.loads(service_account_json)
             credentials = service_account.Credentials.from_service_account_info(
                 service_account_info, scopes=SCOPES
             )
