@@ -16,7 +16,6 @@ SESSION_ID = "default-session"
 
 HEADERS = {
     "Content-Type": "application/json",
-    "Authorization": f"Bearer {API_KEY}",
 }
 
 #let body has text and languageCode and make them required and let them show in the docs  and make them as required in the docs and swagger ui
@@ -29,7 +28,7 @@ async def detect_intent(body: DetectIntentRequest):
     # call the dialogflow cx api
     try:
         response = requests.post(
-            f"{BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}/agents/{AGENT_ID}/sessions/{SESSION_ID}:detectIntent",
+            f"{BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}/agents/{AGENT_ID}/sessions/{SESSION_ID}:detectIntent?key={API_KEY}",
             headers=HEADERS,
             json={"queryInput": {"text": {"text": body.text, "languageCode": body.languageCode}}},
         )
