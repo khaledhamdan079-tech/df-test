@@ -30,13 +30,22 @@ def get_access_token():
     try:
         if SERVICE_ACCOUNT_JSON_B64:
             # For Railway deployment - decode base64 JSON
+            logging.info("Using base64 encoded service account for Railway deployment")
+            logging.info(f"Base64 length: {len(SERVICE_ACCOUNT_JSON_B64)}")
+            
             service_account_json = base64.b64decode(SERVICE_ACCOUNT_JSON_B64).decode('utf-8')
             service_account_info = json.loads(service_account_json)
+            
+            # Log some info about the service account (without sensitive data)
+            logging.info(f"Service account project_id: {service_account_info.get('project_id', 'N/A')}")
+            logging.info(f"Service account client_email: {service_account_info.get('client_email', 'N/A')}")
+            
             credentials = service_account.Credentials.from_service_account_info(
                 service_account_info, scopes=SCOPES
             )
         elif SERVICE_ACCOUNT_FILE:
             # For local development - use file path
+            logging.info(f"Using service account file: {SERVICE_ACCOUNT_FILE}")
             credentials = service_account.Credentials.from_service_account_file(
                 SERVICE_ACCOUNT_FILE, scopes=SCOPES
             )
@@ -46,10 +55,15 @@ def get_access_token():
                 detail="Neither GOOGLE_APPLICATION_CREDENTIALS nor GOOGLE_SERVICE_ACCOUNT_JSON_B64 environment variable is set"
             )
         
+        logging.info("Refreshing credentials...")
         credentials.refresh(GoogleRequest())
+        logging.info("Credentials refreshed successfully")
         return credentials.token
     except Exception as e:
         logging.error(f"Failed to get access token: {e}")
+        logging.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logging.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to authenticate with Google Cloud: {str(e)}"
@@ -59,6 +73,24 @@ def get_access_token():
 class DetectIntentRequest(BaseModel):
     text: str = Field(..., description="The text to detect intent for")
     languageCode: str = Field(..., description="The language code to detect intent for")
+
+@router.get("/test-auth")
+async def test_auth():
+    """Test endpoint to verify authentication without making Dialogflow API calls"""
+    try:
+        access_token = get_access_token()
+        return {
+            "status": "success",
+            "message": "Authentication successful",
+            "token_length": len(access_token),
+            "token_preview": access_token[:20] + "..." if access_token else "No token"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "error_type": type(e).__name__
+        }
 
 @router.post("/detect-intent")
 async def detect_intent(body: DetectIntentRequest):
