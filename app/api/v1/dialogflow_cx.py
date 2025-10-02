@@ -6,18 +6,19 @@ import os
 import base64
 import json
 import tempfile
+import uuid
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import service_account
 
 router = APIRouter(tags=["dialogflow_cx"])
 
 
-BASE_URL = "https://dialogflow.googleapis.com/v3"
+BASE_URL = "https://us-central1-dialogflow.googleapis.com/v3"
 
 PROJECT_ID = "apt-aleph-471911-k3"
 LOCATION = "us-central1"
 AGENT_ID = "e4926e9e-ddd0-4f04-9ba9-a3e1afe8d88b"
-SESSION_ID = "default-session"
+SESSION_ID = str(uuid.uuid4())
 
 # Service account credentials - supports both file path and base64 encoded JSON
 SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
@@ -71,14 +72,31 @@ async def detect_intent(body: DetectIntentRequest):
             "Authorization": f"Bearer {access_token}",
         }
         
+        # Prepare the request body according to Dialogflow CX API format
+        request_body = {
+            "queryInput": {
+                "text": {
+                    "text": body.text
+                },
+                "languageCode": body.languageCode
+            }
+        }
+        
+        # Log the request for debugging
+        logging.info(f"Request URL: {BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}/agents/{AGENT_ID}/sessions/{SESSION_ID}:detectIntent")
+        logging.info(f"Request body: {request_body}")
+        
         response = requests.post(
             f"{BASE_URL}/projects/{PROJECT_ID}/locations/{LOCATION}/agents/{AGENT_ID}/sessions/{SESSION_ID}:detectIntent",
             headers=headers,
-            json={"queryInput": {"text": {"text": body.text, "languageCode": body.languageCode}}},
+            json=request_body,
         )
         
         # Check if the request was successful
-        response.raise_for_status()
+        if response.status_code != 200:
+            logging.error(f"Dialogflow API error: {response.status_code}")
+            logging.error(f"Response content: {response.text}")
+            response.raise_for_status()
         
         # Check if response has content
         if not response.text.strip():
